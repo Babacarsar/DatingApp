@@ -1,5 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using DatingApp.Data;
+using API.Services;
+using API.Interfaces; // Assurez-vous d'importer le namespace correct pour TokenService
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,6 +20,9 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContext<DataContext>(options =>
     options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
 
+// Ajouter le service TokenService
+builder.Services.AddScoped<ITokenService, TokenService>();
+
 // Configurer CORS
 builder.Services.AddCors(options =>
 {
@@ -24,6 +32,25 @@ builder.Services.AddCors(options =>
             .AllowAnyHeader()
             .AllowAnyMethod());
 });
+
+// Configurer l'authentification JWT
+var tokenKey = builder.Configuration["TokenKey"];
+var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(tokenKey));
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration["JwtIssuer"],
+            ValidAudience = builder.Configuration["JwtAudience"],
+            IssuerSigningKey = key
+        };
+    });
 
 // Construire l'application
 var app = builder.Build();
@@ -39,6 +66,12 @@ app.UseHttpsRedirection();
 
 // Utiliser CORS
 app.UseCors("AllowSpecificOrigin");
+
+// Utiliser l'authentification
+app.UseAuthentication();
+
+// Utiliser l'autorisation
+app.UseAuthorization();
 
 // Ajouter les routes des contrôleurs
 app.MapControllers(); // Mapper les routes des contrôleurs
